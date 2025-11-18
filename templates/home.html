@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>SSE Channel Subscriber</title>
+</head>
+
+<body>
+    <h1>Subscribe to SSE Channels</h1>
+
+    <label for="channel">Choose a channel:</label>
+    <select id="channel">
+        <option value="stock_update">Stock Update</option>
+        <option value="news_update">News Update</option>
+    </select>
+    <button id="subscribeBtn">Subscribe</button>
+
+    <h2>Messages:</h2>
+    <ul id="messages"></ul>
+
+    <script>
+        let eventSource;
+
+        document.getElementById('subscribeBtn').addEventListener('click', () => {
+            const channel = document.getElementById('channel').value;
+
+            // Close previous connection if exists
+            if (eventSource) {
+                eventSource.close();
+                document.getElementById('messages').innerHTML = '';
+            }
+
+            // Create new SSE connection for the selected channel
+            eventSource = new EventSource(`/subscribe/${channel}`);
+
+            // Listen for messages of this channel
+            eventSource.addEventListener(channel, function (event) {
+                const data = JSON.parse(event.data);
+                const li = document.createElement('li');
+                li.textContent = JSON.stringify(data);
+                document.getElementById('messages').appendChild(li);
+            });
+
+            eventSource.onerror = function (err) {
+                console.error("SSE error:", err);
+                eventSource.close();
+            };
+        });
+    </script>
+</body>
+
+</html>

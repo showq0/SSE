@@ -10,8 +10,12 @@ import queue
 app = Flask(__name__)
 app.secret_key = 'your_super_secret_key' 
 users = {"sami":"sami", "rami": "rami "} # simple user database
-# global list of SSE connections for all useres
-sse_connections = []
+
+
+sse_channels = {
+    'stock_update': set(),
+    'news_update': set()
+}
 
 
 def login_required(f):
@@ -47,24 +51,18 @@ def generate_stock_data():
         send_sse_event('news_update', news_data)
         time.sleep(2)
 
-
-# Sending SSE events to all connected (subsicribe)clients
-# this function will send the event to all active sse connection
-def send_sse_event(event_type, data):
-    event_data = f"data: {json.dumps(data)}\n\n"# format of sse event
-    global sse_connections
+def send_sse_event(channel, data):
+    
+    event_data = f"data: {json.dumps(data)}\n\n"#
     active_connections = []
-    # So this is where all clients get the same update.
-    for connection in sse_connections:
+    global sse_channels
+    for q in list(sse_channels[channel]):
         try:
-            #connection queue
-            connection.put(event_data)
-            active_connections.append(connection) # list of queues
-            #active_connections is used to remove any dead/disconnected clients.
+            q.put(event_data)
+            active_connections.append(q)
         except:
-            pass
-    sse_connections = active_connections
-
+            pass 
+    sse_channels[channel] = active_connections
 
 @app.route('/')
 @login_required
@@ -78,40 +76,28 @@ def login():
         password = request.form.get('password')
         if username in users and users[username] == password:
             session['username'] = username 
-            return render_template('trads.html')
+            return render_template('home.html')
         else:
             return render_template('login.html', error="Invalid credentials")
     return render_template('login.html')
 
-# this will create active connection in sse_connections
-# and track events for each connection
-@app.route('/events')
-def events():
-    """SSE endpoint"""
+
+@app.route('/subscribe/<channel>')
+def subscribe(channel):
+    if channel not in sse_channels:
+        return "Channel not found", 404
+
     def event_stream():
-        # each client conected has queue 
-        connection_queue = queue.Queue()# when dissconected the queue will removed 
-        sse_connections.append(connection_queue)
-        # add queue to global sse_connections
+        q = queue.Queue()  # Each client gets its own queue
+        sse_channels[channel].append(q)
         try:
             while True:
-                try:
-                    data = connection_queue.get(timeout=30)#Remove and return an item from the queue
-                    yield data
-                except queue.Empty:
-                    yield ": keepalive\n\n"
-        except GeneratorExit:
-            if connection_queue in sse_connections:
-                sse_connections.remove(connection_queue)# remove queue when client disconnected
+                data = q.get()  # Wait for new events
+                yield f"event: {channel}\ndata: {json.dumps(data)}\n\n"
+        finally:
+            sse_channels[channel].remove(q)
 
-    return Response(event_stream(),
-                    mimetype="text/event-stream",
-                    headers={
-                        'Cache-Control': 'no-cache',
-                        'Connection': 'keep-alive',
-                        'Access-Control-Allow-Origin': '*'
-                    })
-
+    return Response(event_stream(), mimetype='text/event-stream')
 def start_background_tasks():
     stock_thread = threading.Thread(target=generate_stock_data, daemon=True)# thread work in the background 
     stock_thread.start()
