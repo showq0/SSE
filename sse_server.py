@@ -17,6 +17,11 @@ sse_channels = {
     'news_update': set()
 }
 
+message_history = {
+    "stock_update": [],
+    "news_update": []
+}
+
 
 def login_required(f):
     @functools.wraps(f)
@@ -43,12 +48,16 @@ def generate_stock_data():
             'timestamp': time.time()
         }
         send_sse_event('stock_update', data) # go to send the event to sse connections
-
+        event_data = f"data: {json.dumps(data)}\n\n"#
+        message_history['stock_update'].append(event_data)
         news_data = {
             'headline': f"{stock} hits {price}",
             'timestamp': time.time()
         }
         send_sse_event('news_update', news_data)
+        event_data = f"data: {json.dumps(news_data)}\n\n"#
+        message_history['news_update'].append(event_data)
+
         time.sleep(2)
 
 def send_sse_event(channel, data):
@@ -59,6 +68,8 @@ def send_sse_event(channel, data):
     for q in list(sse_channels[channel]):
         try:
             q.put(event_data)
+            
+
             active_connections.append(q)
         except:
             pass 
@@ -90,6 +101,8 @@ def subscribe(channel):
     def event_stream():
         q = queue.Queue()  # Each client gets its own queue
         sse_channels[channel].append(q)
+        for msg in message_history[channel]:
+            q.put(msg)
         try:
             while True:
                 data = q.get()  # Wait for new events
