@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>SSE Stock Ticker</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+
+        .stock {
+            padding: 10px;
+            margin: 5px;
+            border: 1px solid #ccc;
+        }
+
+        .positive {
+            background-color: #d4edda;
+        }
+
+        .negative {
+            background-color: #f8d7da;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Real-Time Stock Prices (SSE)</h1>
+    <div id="stocks"></div>
+    <script>
+        // EventSource also known as Server-Sent Events, or SSE) is a great option.
+        //EventSource is a browser API that allows servers to push updates to clients over a single HTTP connection.
+        // EventSource is strictly one-way:
+        const eventSource = new EventSource('/events');// ele
+        const stocksDiv = document.getElementById('stocks');
+        const stocks = {};// object
+
+        eventSource.addEventListener('stock_update', function (event) {
+            const data = JSON.parse(event.data);
+            stocks[data.symbol] = data;
+            updateDisplay();
+        });
+        /*   another way without event name
+           eventSource.onmessage = function (event) {
+            const data = JSON.parse(event.data);
+            stocks[data.symbol] = data;
+            updateDisplay();
+        };
+        */
+
+        function updateDisplay() {
+            stocksDiv.innerHTML = Object.values(stocks)
+                .map(stock => `
+                        <div class="stock ${stock.change >= 0 ? 'positive' : 'negative'}">
+                            <strong>${stock.symbol}</strong>: $${stock.price} (${stock.change >= 0 ? '+' : ''}${stock.change})
+                        </div>
+                    `).join('');
+        }
+
+        eventSource.onerror = function (event) {
+            console.error('SSE error:', event);
+        };
+    </script>
+</body>
+
+</html>
